@@ -1,16 +1,18 @@
+-- CreateEnum
+CREATE TYPE "MovementType" AS ENUM ('import', 'export');
+
 -- CreateTable
 CREATE TABLE "Warehouse" (
-    "id" BIGSERIAL NOT NULL,
+    "id" SERIAL NOT NULL,
     "name" TEXT NOT NULL,
     "capacity" DOUBLE PRECISION NOT NULL,
-    "isHazardous" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "Warehouse_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Product" (
-    "id" BIGSERIAL NOT NULL,
+    "id" SERIAL NOT NULL,
     "name" TEXT NOT NULL,
     "sizePerUnit" DOUBLE PRECISION NOT NULL,
     "isHazardous" BOOLEAN NOT NULL DEFAULT false,
@@ -20,15 +22,21 @@ CREATE TABLE "Product" (
 
 -- CreateTable
 CREATE TABLE "StockMovement" (
-    "id" BIGSERIAL NOT NULL,
-    "warehouseId" BIGINT NOT NULL,
-    "productId" BIGINT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "warehouseId" INTEGER NOT NULL,
+    "productId" INTEGER NOT NULL,
     "quantity" DOUBLE PRECISION NOT NULL,
-    "movementType" TEXT NOT NULL,
+    "movementType" "MovementType" NOT NULL,
     "date" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "StockMovement_pkey" PRIMARY KEY ("id")
 );
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Warehouse_name_key" ON "Warehouse"("name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Product_name_key" ON "Product"("name");
 
 -- AddForeignKey
 ALTER TABLE "StockMovement" ADD CONSTRAINT "StockMovement_warehouseId_fkey" FOREIGN KEY ("warehouseId") REFERENCES "Warehouse"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
