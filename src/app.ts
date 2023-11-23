@@ -220,6 +220,18 @@ const startServer = async () => {
           throw new Error("Product not found");
         }
 
+        // Fetch warehouse details
+        const warehouse = await prisma.warehouse.findUnique({
+          where: { id: args.warehouseId },
+        });
+
+        if (!warehouse) {
+          throw new Error("Warehouse not found");
+        }
+
+        // Calculate the required space for the stock movement
+        const requiredSpace = product.sizePerUnit * args.quantity;
+
         // Fetch existing stock movements for the product in the warehouse
         const existingMovements = await prisma.stockMovement.findMany({
           where: { warehouseId: args.warehouseId, productId: args.productId },
@@ -230,6 +242,11 @@ const startServer = async () => {
         existingMovements.forEach(movement => {
           currentStock += movement.movementType === "import" ? movement.quantity : -movement.quantity;
         });
+
+        // Check if the movement is an import and the capacity will be exceeded
+        if (args.movementType === "import" && requiredSpace + currentStock > warehouse.capacity) {
+          throw new Error("Insufficient capacity in the warehouse for the incoming stock");
+        }
 
         // Check for hazardous conflict if the movement is an import
         if (args.movementType === "import") {
