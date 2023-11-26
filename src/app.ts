@@ -13,7 +13,13 @@ const startServer = async () => {
   type Query {
     warehouses: [Warehouse]
     products: [Product]
-    stockMovements: [StockMovement]
+    stockMovements(
+      warehouseId: Int,
+      productId: Int,
+      movementType: MovementType,
+      startDate: String
+      endDate: String
+    ): [StockMovement]
     warehouseCapacity(warehouseId: Int!): WarehouseCapacity
   }
 
@@ -123,9 +129,45 @@ const startServer = async () => {
           }
         );
       },
-      stockMovements: async () => {
+      stockMovements: async (_: any, args: {
+        warehouseId?: number;
+        productId?: number;
+        movementType?: string;
+        startDate?: string;
+        endDate?: string;
+      }) => {
+        const whereClause: any = {};
+
+        if (args.warehouseId) {
+          whereClause.warehouseId = args.warehouseId;
+        }
+
+        if (args.productId) {
+          whereClause.productId = args.productId;
+        }
+
+        if (args.movementType) {
+          whereClause.movementType = args.movementType;
+        }
+
+        if (args.startDate && args.endDate) {
+          whereClause.date = {
+            gte: args.startDate,
+            lte: args.endDate,
+          };
+        } else if (args.startDate) {
+          whereClause.date = {
+            gte: args.startDate,
+          };
+        } else if (args.endDate) {
+          whereClause.date = {
+            lte: args.endDate,
+          };
+        }
+
         return await prisma.stockMovement.findMany(
           {
+            where: whereClause,
             include: {
               warehouse: true,
               product: true,
@@ -284,13 +326,15 @@ const startServer = async () => {
           }
         }
 
-        // Check if enough product is available for export
-        const currentStockResponse = await fetch(`${calculationServerURL}/currentProductStock/${args.warehouseId}/${args.productId}`);
-        const currentStockJson = await currentStockResponse.json() as { currentStock: number };
-        const currentProductStock = currentStockJson.currentStock;
+        if (args.movementType === "export") {
+          // Check if enough product is available for export
+          const currentStockResponse = await fetch(`${calculationServerURL}/currentProductStock/${args.warehouseId}/${args.productId}`);
+          const currentStockJson = await currentStockResponse.json() as { currentStock: number };
+          const currentProductStock = currentStockJson.currentStock;
 
-        if (currentProductStock < args.quantity) {
-          throw new Error("Not enough product in the warehouse to export");
+          if (currentProductStock < args.quantity) {
+            throw new Error("Not enough product in the warehouse to export");
+          }
         }
 
         // Proceed with the stock movement
