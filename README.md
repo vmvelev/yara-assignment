@@ -2,7 +2,7 @@
 
 ## Description
 
-Tech stack - Apollo GraphQL, Node.js with TypeScript, Docker.
+Tech stack - Apollo GraphQL, Node.js with TypeScript, PostgreSQL, Docker.
 
 The project servers as a warehouse platform that allows a user to create a warehouse and keep track of the imports and exports of products in it.
 
