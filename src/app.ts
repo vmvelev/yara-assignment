@@ -14,7 +14,7 @@ const startServer = async () => {
     warehouses: [Warehouse]
     products: [Product]
     stockMovements: [StockMovement]
-    currentStock(warehouseId: Int!): Float
+    warehouseCapacity(warehouseId: Int!): WarehouseCapacity
   }
 
   type Mutation {
@@ -87,6 +87,12 @@ const startServer = async () => {
     movementType: MovementType!
     date: String!
   }
+
+  type WarehouseCapacity {
+    currentCapacity: Float!
+    warehouseCapacity: Float!
+    remainingCapacity: Float!
+  }
 `;
 
   const resolvers = {
@@ -127,11 +133,15 @@ const startServer = async () => {
           }
         );
       },
-      currentStock: async (_: any, { warehouseId }: { warehouseId: number }) => {
+      warehouseCapacity: async (_: any, { warehouseId }: { warehouseId: number }) => {
         try {
-          const response = await fetch(`${calculationServerURL}/currentStock/${warehouseId}`);
-          const json = await response.json() as { currentStock: number };
-          return json.currentStock;
+          const response = await fetch(`${calculationServerURL}/currentCapacity/${warehouseId}`);
+          const json = await response.json() as {
+            currentStock: number,
+            warehouseCapacity: number,
+            remainingCapacity: number
+          };
+          return json;
         } catch (error) {
           throw new Error((error as Error).message);
         }
@@ -152,7 +162,7 @@ const startServer = async () => {
       editWarehouse: async (_: any, args: {
         id?: number;
         name?: string;
-        capacity: number;
+        capacity?: number;
       }) => {
         return await prisma.warehouse.update({
           where: { id: args.id },
@@ -230,21 +240,21 @@ const startServer = async () => {
         }
 
         // Calculate the required space for the stock movement
-        const requiredSpace = product.sizePerUnit * args.quantity;
+        const requiredSpaceResponse = await fetch(`${calculationServerURL}/requiredSpace/${args.productId}/${args.quantity}`);
+        const requiredSpaceJson = await requiredSpaceResponse.json() as { requiredSpace: number };
+        const requiredSpace = requiredSpaceJson.requiredSpace;
 
-        // Fetch existing stock movements for the product in the warehouse
-        const existingMovements = await prisma.stockMovement.findMany({
-          where: { warehouseId: args.warehouseId, productId: args.productId },
-        });
-
-        // Calculate the current stock for the product
-        let currentStock = 0;
-        existingMovements.forEach(movement => {
-          currentStock += movement.movementType === "import" ? movement.quantity : -movement.quantity;
-        });
+        // Check the current capacity of the warehouse
+        const warehouseCapacityResponse = await fetch(`${calculationServerURL}/currentCapacity/${args.warehouseId}`);
+        const warehouseCapacityJson = await warehouseCapacityResponse.json() as {
+          currentCapacity: number,
+          warehouseCapacity: number,
+          remainingCapacity: number
+        };
+        const remainingCapacity = warehouseCapacityJson;
 
         // Check if the movement is an import and the capacity will be exceeded
-        if (args.movementType === "import" && requiredSpace + currentStock > warehouse.capacity) {
+        if (args.movementType === "import" && requiredSpace > remainingCapacity.remainingCapacity) {
           throw new Error("Insufficient capacity in the warehouse for the incoming stock");
         }
 
@@ -257,14 +267,14 @@ const startServer = async () => {
 
           // Filter out movements of the same product and calculate stock of other products
           const otherProductsStock = otherProductsInWarehouse
-            .filter(movement => movement.product.id !== args.productId)
-            .reduce((acc, movement) => {
+            .filter((movement: { product: { id: number; }; }) => movement.product.id !== args.productId)
+            .reduce((acc: any, movement: { movementType: string; quantity: number; }) => {
               return acc + (movement.movementType === "import" ? movement.quantity : -movement.quantity);
             }, 0);
 
           // Check for hazardous conflict only if there are other products in the warehouse
           if (otherProductsStock > 0) {
-            const isHazardousConflict = otherProductsInWarehouse.some(movement =>
+            const isHazardousConflict = otherProductsInWarehouse.some((movement: { product: { isHazardous: boolean; }; }) =>
               movement.product.isHazardous !== product.isHazardous
             );
 
@@ -275,7 +285,11 @@ const startServer = async () => {
         }
 
         // Check if enough product is available for export
-        if (args.movementType === "export" && currentStock < args.quantity) {
+        const currentStockResponse = await fetch(`${calculationServerURL}/currentProductStock/${args.warehouseId}/${args.productId}`);
+        const currentStockJson = await currentStockResponse.json() as { currentStock: number };
+        const currentProductStock = currentStockJson.currentStock;
+
+        if (currentProductStock < args.quantity) {
           throw new Error("Not enough product in the warehouse to export");
         }
 
@@ -303,7 +317,7 @@ const startServer = async () => {
     listen: { port: parseInt(process.env.APOLLO_SERVER_PORT || "4000") },
   });
 
-  console.log(`Server ready at ${url}`);
+  console.log(`Apollo Server ready at ${url}`);
 };
 
 startServer();
